@@ -1,0 +1,156 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+
+enum QuestionSign {
+  plus
+  minus
+  multiplication
+  divide
+}
+
+enum FriendsStatus {
+  pending
+  accepted
+  rejected
+}
+
+enum QuestionAnswerStatus {
+  correct
+  incorrect
+  unanswered
+}
+
+enum GameStatus {
+  searching_for_players
+  started
+  ended
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+enum GameMemberStatus {
+  active
+  WON
+  LOST
+  DRAW
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  username  String     @unique
+  password  String     // Store a password hash, never plaintext
+  status    UserStatus @default(active)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rating    UserRating?
+  sentRequests     Friends[] @relation("FriendSender")
+  receivedRequests Friends[] @relation("FriendReceiver")
+  gameMemberships  GameMember[]
+  answers          QuestionAnswer[]
+
+  @@index([status])
+}
+
+model UserRating {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  rating    Int      @default(1000)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Game {
+  id        String     @id @default(uuid())
+  timeLimit Int        // Duration in seconds
+  status    GameStatus @default(searching_for_players)
+
+  createdAt DateTime @default(now())
+  startAt   DateTime?
+  endsAt    DateTime?
+
+  members   GameMember[]
+  questions Question[]
+
+  @@index([status, createdAt])
+}
+
+model GameMember {
+  id       String           @id @default(uuid())
+  gameId   String
+  userId   String
+  status   GameMemberStatus @default(active)
+  score    Int              @default(0)
+  joinedAt DateTime         @default(now())
+  finishedAt DateTime?
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, userId])
+  @@index([userId, joinedAt])
+}
+
+model Question {
+  id            String       @id @default(uuid())
+  gameId        String
+  order         Int
+  operation1    Int
+  operation2    Int
+  sign           QuestionSign
+  systemAnswer   Decimal      @db.Decimal(20, 6)
+
+  game    Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  answers QuestionAnswer[]
+
+  @@unique([gameId, order])
+  @@index([gameId])
+}
+
+model QuestionAnswer {
+  id         String               @id @default(uuid())
+  questionId String
+  userId     String
+  answer     Decimal?             @db.Decimal(20, 6)
+  status     QuestionAnswerStatus @default(unanswered)
+  answeredAt DateTime?
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, userId])
+  @@index([userId, status])
+}
+
+model Friends {
+  id         String        @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     FriendsStatus @default(pending)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  sender   User @relation("FriendSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+}
